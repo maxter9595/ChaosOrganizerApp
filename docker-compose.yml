@@ -1,0 +1,82 @@
+version: "3.8"
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: ahj-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: chat_app
+      MYSQL_USER: chat_user
+      MYSQL_PASSWORD: chat_password
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: ahj-phpmyadmin
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      PMA_USER: root
+      PMA_PASSWORD: rootpassword
+    ports:
+      - "8080:80"
+    depends_on:
+      - mysql
+    networks:
+      - app-network
+
+  app:
+    build: .
+    container_name: ahj-app
+    environment:
+      NODE_ENV: production
+      PORT: 10000
+      MYSQL_HOST: mysql
+      MYSQL_DATABASE: chat_app
+      MYSQL_USER: chat_user
+      MYSQL_PASSWORD: chat_password
+      BASE_URL: http://localhost:10000
+      WS_URL: ws://localhost:10000
+    ports:
+      - "10000:10000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - ./backend/public:/app/backend/public
+      - ./uploads:/app/uploads
+    networks:
+      - app-network
+    command: >
+      sh -c "cd backend && npm run start"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: ahj-frontend
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./frontend:/app/frontend
+      - /app/frontend/node_modules
+    networks:
+      - app-network
+
+volumes:
+  mysql_data:
+
+networks:
+  app-network:
+    driver: bridge
